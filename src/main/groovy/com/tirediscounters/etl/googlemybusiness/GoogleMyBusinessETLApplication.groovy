@@ -79,6 +79,11 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
         getLocationIds(accountId);
         getLocationInsights(accountId, locationMap)
 
+        // upload list of Store Insights to Redshift
+        storeInsightList.each{
+            createS3Object(storeInsightList)
+        }
+
     }
 
     public String getAccountId(){
@@ -136,7 +141,9 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
             br.close();
             String responseBody = sb.toString();
             def responseJson = new JsonSlurper().parseText(responseBody)
-            locationMap.add(responseJson.locationId)
+            for(Object entry : responseJson) {
+                locationMap.add(entry.locationId)
+            }
         } else {
             BufferedReader br = new BufferedReader(new InputStreamReader(connection.getErrorStream()));
             String strCurrentLine;
@@ -149,18 +156,18 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
     }
 
     public List<StoreInsight> getLocationInsights(String accountId, List<String> locationMap){
-        //List<StoreInsight> storeInsightList = new ArrayList<StoreInsight>();
+        StoreInsight locationInsight = new StoreInsight();
         URL url = new URL(gmbURL + '/insights/?' + endDate + '&' + startDate)
 
-        for (String entry : locationMap) {
+        for (String locationId : locationMap) {
             JSONObject bodyJson   = new JSONObject();
-            bodyJson.put(accountId);
-            bodyJson.put(entry);
+            bodyJson.put("Locations",accountId + '/' + locationId)
 
             HttpURLConnection connection = (HttpURLConnection) url.openConnection()
             connection.setRequestProperty("Authorization", gmbToken)
             connection.setRequestProperty("gid", gmbGID)
             connection.setRequestProperty("Accept", "*/*")
+            connection.setDoOutput(true)
             connection.setRequestMethod("POST")
 
             OutputStreamWriter wr = new OutputStreamWriter(connection.getOutputStream());
@@ -179,7 +186,26 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
                 br.close();
                 String responseBody = sb.toString();
                 def responseJson = new JsonSlurper().parseText(responseBody)
-                storeInsightList.add(responseJson)
+                for(Object entry : responseJson) {
+                    locationInsight.m_storeId = entry.locationId
+                    locationInsight.m_storeName = entry.locationId
+                    locationInsight.m_directionRequests = entry.directionRequests
+                    locationInsight.m_mobilePhoneCalls = entry.mobilePhoneCalls
+                    locationInsight.m_websiteVisits = entry.websiteVisits
+                    locationInsight.m_rating = entry.rating
+                    locationInsight.m_localPostActions = entry.localPostActions
+                    locationInsight.m_localPostViews = entry.localPostViews
+                    locationInsight.m_customerPhotoCount = entry.customerPhotoCount
+                    locationInsight.m_merchantPhotoCount = entry.merchantPhotoCount
+                    locationInsight.m_customerPhotoViews = entry.customerPhotoViews
+                    locationInsight.m_merchantPhotoViews = entry.merchantPhotoViews
+                    locationInsight.m_directSearches = entry.directSearches
+                    locationInsight.m_discoverySearches = entry.discoverySearches
+                    locationInsight.m_mapViews = entry.mapViews
+                    locationInsight.m_searchViews = searchViews
+
+                    storeInsightList.add(locationInsight)
+                }
             } else {
                 BufferedReader br = new BufferedReader(new InputStreamReader(connection.getErrorStream()));
                 String strCurrentLine;

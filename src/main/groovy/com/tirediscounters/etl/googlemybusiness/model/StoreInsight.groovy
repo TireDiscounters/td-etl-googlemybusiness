@@ -19,17 +19,4 @@ class StoreInsight extends DimETLRecord {
     String m_discoverySearches
     String m_mapViews
     String m_searchViews
-
-    List<String> getJsonFieldList() {
-        return ["key", "googlemybusiness id", "googlemybusiness first name", "googlemybusiness last name", "googlemybusiness job code",
-                "googlemybusiness job description", "googlemybusiness department code", "googlemybusiness department name", "googlemybusiness is active",
-                "googlemybusiness is technician", "lasting_key", "row_effective_date", "row_expiration_date", "current_row_flag",
-                "row_hash", "row_creation_timestamp"]
-    }
-
-    List<String> getHashFieldList() {
-        return ["googlemybusiness id", "googlemybusiness first name", "googlemybusiness last name", "googlemybusiness job code",
-                "googlemybusiness job description", "googlemybusiness department code", "googlemybusiness department name", "googlemybusiness is active",
-                "googlemybusiness is technician"]
-    }
 }
