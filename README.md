@@ -1,2 +1,2 @@
 # td-etl-googlemybusiness
- repo for google my business project
+ETL program for the Google My Business fact table

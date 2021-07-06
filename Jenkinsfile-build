@@ -1,0 +1,26 @@
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+
+pipeline {
+    agent any
+    tools { 
+        maven 'Maven 3.6.3' 
+        jdk 'jdk8' 
+    }
+    parameters { 
+        choice(name: 'PROFILE', choices: ['dev', 'qa', 'prod'], description: 'This determines what spring profile is selected')
+    }
+    stages {
+        stage ('Build') {
+            steps {
+                sh "mvn clean package install -DskipTests=true -P ${PROFILE}"
+            }
+        }
+
+        stage ('Deploy') {
+            steps {
+                sh "mvn deploy -P ${PROFILE}"
+            }
+        }
+    }
+}
