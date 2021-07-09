@@ -5,6 +5,7 @@ import com.tirediscounters.etl.common.model.DimETLRecord
 class StoreInsight extends DimETLRecord {
     String m_storeId
     String m_storeName
+    String m_date
     String m_directionRequests
     String m_mobilePhoneCalls
     String m_websiteVisits

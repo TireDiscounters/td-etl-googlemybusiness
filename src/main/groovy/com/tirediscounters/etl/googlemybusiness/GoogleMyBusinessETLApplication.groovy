@@ -18,8 +18,12 @@ import javax.sql.DataSource
 
 import groovy.json.JsonSlurper
 
+import java.text.SimpleDateFormat
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 @SpringBootApplication (
         excludeName = ["org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration",
@@ -54,36 +58,36 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
     @Override
     public void run(String... args) {
         ProgramArguments programArguments = new ProgramArguments(args)
-
         ProgramEnvironment programEnvironment = new ProgramEnvironment(environment)
-        final String dataWarehouseSchema = programEnvironment.getRequiredPropertyAsString("data.warehouse.schema")
 
-        redshiftReader = new RedshiftReader(m_dataWarehouseDataSource, dataWarehouseSchema)
+        System.setProperty("com.sun.xml.ws.transport.http.client.HttpTransportPipe.dump", "true");
+        System.setProperty("com.sun.xml.internal.ws.transport.http.client.HttpTransportPipe.dump", "true");
+        System.setProperty("com.sun.xml.ws.transport.http.HttpAdapter.dump", "true");
+        System.setProperty("com.sun.xml.internal.ws.transport.http.HttpAdapter.dump", "true");
+        System.setProperty("com.sun.xml.internal.ws.transport.http.HttpAdapter.dumpTreshold", "999999");
 
-        LocalDateTime now = LocalDateTime.now();
+        this.m_batchSize = programEnvironment.getRequiredPropertyAsInteger("batch.size")
 
-        startDate = now.with(LocalTime.MIN);
-        endDate = now.with(LocalTime.MAX);
 
-        gmbURL = programEnvironment.getRequiredPropertyAsString("googlemybusiness.url")
-        gmbToken = programEnvironment.getRequiredPropertyAsString("googlemybusiness.token")
-        gmbGID = programEnvironment.getRequiredPropertyAsString("googlemybusiness.gid")
+        //todo add ability to pass in month and run for each day
+        if (programArguments.getArgumentAsLocalDate("firstDay").isPresent()) {
+            startDate = programArguments.getArgumentAsLocalDate("startDate").with(LocalTime.MIN)
+            endDate = programArguments.getRequiredArgumentAsLocalDate("endDate").with(LocalTime.MAX)
+        } else {
+            LocalDateTime now = LocalDateTime.now();
 
-        if (programArguments.getArgumentAsString("localPath").isPresent()) {
-            this.m_localPath = programArguments.getArgumentAsString("localPath").get()
+            startDate = now.with(LocalTime.MIN);
+            endDate = now.with(LocalTime.MAX);
         }
 
-        init(programEnvironment)
+        init(programEnvironment, programArguments)
 
         getAccountId();
         getLocationIds(accountId);
         getLocationInsights(accountId, locationMap)
 
         // upload list of Store Insights to Redshift
-        storeInsightList.each{
-            createS3Object(storeInsightList)
-        }
-
+        processStoreInsights(storeInsightList)
     }
 
     public String getAccountId(){
@@ -156,12 +160,14 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
     }
 
     public List<StoreInsight> getLocationInsights(String accountId, List<String> locationMap){
-        StoreInsight locationInsight = new StoreInsight();
+
+        SimpleDateFormat dwFormat = new SimpleDateFormat("yyyy-MM-dd");
         URL url = new URL(gmbURL + '/insights/?' + endDate + '&' + startDate)
 
         for (String locationId : locationMap) {
             JSONObject bodyJson   = new JSONObject();
-            bodyJson.put("Locations",accountId + '/' + locationId)
+            String accountLocString = "[" + accountId + "/" + locationId + "]"
+            bodyJson.put("Locations",accountLocString)
 
             HttpURLConnection connection = (HttpURLConnection) url.openConnection()
             connection.setRequestProperty("Authorization", gmbToken)
@@ -187,8 +193,11 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
                 String responseBody = sb.toString();
                 def responseJson = new JsonSlurper().parseText(responseBody)
                 for(Object entry : responseJson) {
+                    StoreInsight locationInsight = new StoreInsight();
+
                     locationInsight.m_storeId = entry.locationId
                     locationInsight.m_storeName = entry.locationId
+                    locationInsight.m_date = dwFormat.format(startDate)
                     locationInsight.m_directionRequests = entry.directionRequests
                     locationInsight.m_mobilePhoneCalls = entry.mobilePhoneCalls
                     locationInsight.m_websiteVisits = entry.websiteVisits
@@ -202,7 +211,7 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
                     locationInsight.m_directSearches = entry.directSearches
                     locationInsight.m_discoverySearches = entry.discoverySearches
                     locationInsight.m_mapViews = entry.mapViews
-                    locationInsight.m_searchViews = searchViews
+                    locationInsight.m_searchViews = entry.searchViews
 
                     storeInsightList.add(locationInsight)
                 }
@@ -216,5 +225,75 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
         }
 
         return storeInsightList;
+    }
+
+    public void processStoreInsights(List<StoreInsight> storeInsightList){
+
+        final ExecutorService executor = Executors.newFixedThreadPool(12)
+
+        if (storeInsightList == null || storeInsightList.size() == 0){
+            LOGGER.info("No store insights in the list.")
+            System.exit(0)
+        }
+
+        int count = 0
+        final List<StoreInsight> buffer = new ArrayList<>()
+        storeInsightList.each { final storeInsight ->
+            if (batchIsFull(count)) {
+                LOGGER.info("$count store insights have been extracted and translated")
+
+                // dump the buffer content into a new collection
+                List<StoreInsight> recordList = new ArrayList<>()
+                buffer.each { recordList.add(it) }
+
+                // clear the buffer
+                buffer.clear()
+
+                // write the records to a S3 object
+                executor.execute {
+                    createS3Object(recordList)
+                }
+                count = 0
+            }
+
+            buffer.add(storeInsight)
+            count ++
+        }
+
+        if (buffer.size() > 0) {
+            // if the buffer is not empty, write its content to a S3 object
+            executor.execute {
+                createS3Object(buffer)
+            }
+        }
+
+        executor.shutdown()
+
+    }
+
+    protected init(ProgramEnvironment programEnvironment, ProgramArguments programArguments) {
+        super.init(programEnvironment)
+
+        final String dataWarehouseSchema = programEnvironment.getRequiredPropertyAsString("data.warehouse.schema")
+
+        this.redshiftReader = new RedshiftReader(m_dataWarehouseDataSource, dataWarehouseSchema)
+
+        if (programArguments.getArgumentAsLocalDate("firstDay").isPresent()) {
+            startDate = programArguments.getArgumentAsLocalDate("startDate").with(LocalTime.MIN)
+            endDate = programArguments.getRequiredArgumentAsLocalDate("endDate").with(LocalTime.MAX)
+        } else {
+            LocalDateTime now = LocalDateTime.now();
+
+            startDate = now.with(LocalTime.MIN);
+            endDate = now.with(LocalTime.MAX);
+        }
+
+        if (programArguments.getArgumentAsString("localPath").isPresent()) {
+            this.m_localPath = programArguments.getArgumentAsString("localPath").get()
+        }
+
+        gmbURL = programEnvironment.getRequiredPropertyAsString("googlemybusiness.url")
+        gmbToken = programEnvironment.getRequiredPropertyAsString("googlemybusiness.token")
+        gmbGID = programEnvironment.getRequiredPropertyAsString("googlemybusiness.gid")
     }
 }
