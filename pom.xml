@@ -11,7 +11,7 @@
     <groupId>com.tirediscounters</groupId>
     <artifactId>td-etl-googlemybusiness</artifactId>
     <version>1.0.0${version.suffix}</version>
-    <name>td-etl-googlemybusiness</name>
+    <name>td-etl-google-my-business</name>
     <description>ETL program for the Google My Business fact table</description>
 
     <properties>
@@ -39,7 +39,7 @@
         <dependency>
             <groupId>com.tirediscounters</groupId>
             <artifactId>td-etl-common</artifactId>
-            <version>3.0.2</version>
+            <version>3.2.3</version>
         </dependency>
 
         <dependency>

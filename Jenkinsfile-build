@@ -1,26 +1,34 @@
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 pipeline {
     agent any
-    tools { 
-        maven 'Maven 3.6.3' 
-        jdk 'jdk8' 
+    tools {
+        maven 'Maven 3.6.3'
+        jdk 'jdk8'
     }
-    parameters { 
-        choice(name: 'PROFILE', choices: ['dev', 'qa', 'prod'], description: 'This determines what spring profile is selected')
+    parameters { booleanParam(name: 'PROD_BUILD', defaultValue: false, description: '') }
+    environment {
+        SPRING_PROFILE = getSpringProfile(params.PROD_BUILD)
     }
     stages {
+
         stage ('Build') {
             steps {
-                sh "mvn clean package install -DskipTests=true -P ${PROFILE}"
+                sh "mvn clean package install -DskipTests=true -P ${SPRING_PROFILE}"
             }
         }
 
         stage ('Deploy') {
             steps {
-                sh "mvn deploy -P ${PROFILE}"
+                sh "mvn deploy -P ${SPRING_PROFILE}"
             }
         }
     }
+}
+
+def getSpringProfile(Boolean isProd) {
+    return isProd ? 'prod' : 'dev'
+}
+
+def getProfileFromBranch(branch) {
+    return branch == 'origin/master' ? 'prod' : 'dev'
 }
