@@ -9,7 +9,7 @@ pipeline {
     }
     parameters { 
         choice(name: 'PROFILE', choices: ['dev', 'qa', 'prod'], description: 'This determines whether this is a run job or a build job')
-        string(name: 'DAYS', defaultValue: '7', description: 'Each ETL job can have a days value specified. This will grab data from the past DAYS days') 
+        string(name: 'DAYS', defaultValue: '7', description: 'Each ETL job can have a days value specified. This will grab data from the past DAYS days')
         string(name: 'FIRST_DAY', defaultValue: 'NULL', description: 'Each ETL job can have a date range specified. This will grab data between FIRST_DAY and LAST_DAY') 
         string(name: 'LAST_DAY', defaultValue: 'NULL', description: 'Each ETL job can have a date range specified. This will grab data between FIRST_DAY and LAST_DAY')
         string(name: 'ADDITIONAL_PARAMS', defaultValue: 'NULL', description: 'Additional parameters to add to the execution of the ETL jobs.') 
@@ -51,7 +51,7 @@ def addPackageSuffix(String version, String profile) {
 }
 
 def addAdditionalParams(String days, String firstDay, String lastDay, String additionalParams) {
-    String dateParams = days == 'NULL' ? "firstDay=${firstDay} lastDay=${lastDay}" : "days=${days}"
+    String dateParams = days == 'NULL' ? "startDate=${firstDay} endDate=${lastDay}" : "days=${days}"
     additionalParams = additionalParams != 'NULL' ? additionalParams : ' '
     return additionalParams + ' ' + dateParams + ' '
 }
