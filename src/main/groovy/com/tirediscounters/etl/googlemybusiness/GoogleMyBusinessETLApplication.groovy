@@ -403,7 +403,7 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
     protected init(ProgramEnvironment programEnvironment, ProgramArguments programArguments) {
         super.init(programEnvironment)
 
-        final String dataWarehouseSchema = programEnvironment.getRequiredPropertyAsString("data.warehouse.schema")
+        dataWarehouseSchema = programEnvironment.getRequiredPropertyAsString("data.warehouse.schema")
 
         this.m_batchSize = programEnvironment.getRequiredPropertyAsInteger("batch.size")
         this.redshiftReader = new RedshiftReader(m_dataWarehouseDataSource, dataWarehouseSchema)
