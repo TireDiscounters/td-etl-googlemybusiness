@@ -59,6 +59,7 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
     private String accountId = new String();
     private List<Store> storeList = new ArrayList<Store>();
     private GoogleMyBusiness googleMyBusiness = new GoogleMyBusiness();
+    Map<Integer, Set<StoreKey>> storeKeyMap = new HashMap<>()
 
     static void main(String[] args){
         SpringApplication.run(GoogleMyBusinessETLApplication, args)
