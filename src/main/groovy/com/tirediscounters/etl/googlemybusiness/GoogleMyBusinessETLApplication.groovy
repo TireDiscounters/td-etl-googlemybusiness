@@ -4,6 +4,7 @@ import com.tirediscounters.etl.common.APIETLApplication
 import com.tirediscounters.etl.common.model.StoreKey
 import com.tirediscounters.etl.dbreader.RedshiftReader
 import com.tirediscounters.etl.googlemybusiness.model.GoogleMyBusiness
+import com.tirediscounters.etl.googlemybusiness.model.InsightDate
 import com.tirediscounters.etl.googlemybusiness.model.Store
 import com.tirediscounters.etl.googlemybusiness.model.StoreInsight
 import com.tirediscounters.etl.googlemybusiness.model.StoreRating
@@ -28,6 +29,8 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.stream.Collectors
+import java.util.stream.IntStream
 
 @SpringBootApplication (
         excludeName = ["org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration",
@@ -46,18 +49,16 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
     private RedshiftReader redshiftReader
     private String dataWarehouseSchema
 
-    private String startDateString
-    private String endDateString
-    private String startDate
-    private String endDate
-    private String insightDate
+    private String firstDayString
     private String gmbURL
     private String gmbToken
     private String gmbGID
     private String aggregate
+    private Integer runDays
     private String m_objectKeyPrefix
     private String accountId = new String();
     private List<Store> storeList = new ArrayList<Store>();
+    public List<InsightDate> dateList = new ArrayList<InsightDate>();
     private GoogleMyBusiness googleMyBusiness = new GoogleMyBusiness();
     Map<Integer, Set<StoreKey>> storeKeyMap = new HashMap<>()
 
@@ -172,90 +173,92 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
     }
 
     public GoogleMyBusiness getLocationInsights(String accountId, List<Store> storeList){
-        URL url = new URL(gmbURL + '/insights/?endDateTime=' + endDate + '&startDateTime=' + startDate)
-        for (Store store : storeList) {
+        for (InsightDate dateObject : dateList) {
+            URL url = new URL(gmbURL + '/insights/?endDateTime=' + dateObject.endDate + '&startDateTime=' + dateObject.startDate)
+            for (Store store : storeList) {
 
-            String accountLocString = "{\"locations\": [\"${accountId}/${store.locationId}\"]}"
+                String accountLocString = "{\"locations\": [\"${accountId}/${store.locationId}\"]}"
 
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection()
-            connection.setRequestProperty("Authorization", gmbToken)
-            connection.setRequestProperty("gid", gmbGID)
-            connection.setRequestProperty("aggregate", "minute")
-            connection.setRequestProperty("Accept", "*/*")
-            connection.setRequestProperty("content-type", "application/json");
-            connection.setDoOutput(true)
-            connection.setRequestMethod("POST")
-            OutputStream os = connection.getOutputStream();
-            OutputStreamWriter wr = new OutputStreamWriter(os, "UTF-8");
-            wr.write(accountLocString);
-            wr.flush();
-            wr.close();
-            os.close();
-            connection.connect();
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection()
+                connection.setRequestProperty("Authorization", gmbToken)
+                connection.setRequestProperty("gid", gmbGID)
+                connection.setRequestProperty("aggregate", "minute")
+                connection.setRequestProperty("Accept", "*/*")
+                connection.setRequestProperty("content-type", "application/json");
+                connection.setDoOutput(true)
+                connection.setRequestMethod("POST")
+                OutputStream os = connection.getOutputStream();
+                OutputStreamWriter wr = new OutputStreamWriter(os, "UTF-8");
+                wr.write(accountLocString);
+                wr.flush();
+                wr.close();
+                os.close();
+                connection.connect();
 
-            Integer responseCode = connection.getResponseCode()
-            if (200 <= responseCode && responseCode <= 399) {
-                BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                Integer responseCode = connection.getResponseCode()
+                if (200 <= responseCode && responseCode <= 399) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream()));
 
-                StringBuilder sb = new StringBuilder();
-                String strCurrentLine;
-                while ((strCurrentLine = br.readLine()) != null) {
-                    sb.append(strCurrentLine + "\n");
-                }
-                br.close();
-                String responseBody = sb.toString();
-                def responseJson = new JsonSlurper().parseText(responseBody)
-                for(Object entry : responseJson) {
+                    StringBuilder sb = new StringBuilder();
+                    String strCurrentLine;
+                    while ((strCurrentLine = br.readLine()) != null) {
+                        sb.append(strCurrentLine + "\n");
+                    }
+                    br.close();
+                    String responseBody = sb.toString();
+                    def responseJson = new JsonSlurper().parseText(responseBody)
+                    for (Object entry : responseJson) {
 
-                    if(entry.value != "ok") {
-                        StoreInsight locationInsight = new StoreInsight();
+                        if (entry.value != "ok") {
+                            StoreInsight locationInsight = new StoreInsight();
 
-                        locationInsight.m_storeId = store.storeId
-                        locationInsight.m_storeKey = store.storeKey
-                        locationInsight.m_storeAddress = store.storeAddress
-                        locationInsight.m_date = insightDate
-                        locationInsight.m_dateKey = insightDate.replaceAll("[\\s\\-()]", "")
-                        locationInsight.m_directionRequests = entry.value.actionStats.ACTIONS_DRIVING_DIRECTIONS.total.numeric
-                        locationInsight.m_mobilePhoneCalls = entry.value.actionStats.ACTIONS_PHONE.total.numeric
-                        locationInsight.m_websiteVisits = entry.value.actionStats.ACTIONS_WEBSITE.total.numeric
-                        locationInsight.m_localPostActions = entry.value.localPostStats.LOCAL_POST_ACTIONS_CALL_TO_ACTION.total.numeric
-                        locationInsight.m_localPostViews = entry.value.localPostStats.LOCAL_POST_VIEWS_SEARCH.total.numeric
-                        locationInsight.m_customerPhotoCount = entry.value.photoStats.PHOTOS_COUNT_CUSTOMERS.total.numeric
-                        locationInsight.m_merchantPhotoCount = entry.value.photoStats.PHOTOS_COUNT_MERCHANT.total.numeric
-                        locationInsight.m_customerPhotoViews = entry.value.photoStats.PHOTOS_VIEWS_CUSTOMERS.total.numeric
-                        locationInsight.m_merchantPhotoViews = entry.value.photoStats.PHOTOS_VIEWS_MERCHANT.total.numeric
-                        locationInsight.m_directSearches = entry.value.searchStats.QUERIES_DIRECT.total.numeric
-                        locationInsight.m_discoverySearches = entry.value.searchStats.QUERIES_INDIRECT.total.numeric
-                        locationInsight.m_mapViews = entry.value.viewStats.VIEWS_MAPS.total.numeric
-                        locationInsight.m_searchViews = entry.value.viewStats.VIEWS_SEARCH.total.numeric
+                            locationInsight.m_storeId = store.storeId
+                            locationInsight.m_storeKey = store.storeKey
+                            locationInsight.m_storeAddress = store.storeAddress
+                            locationInsight.m_date = dateObject.insightDate
+                            locationInsight.m_dateKey = dateObject.insightDate.replaceAll("[\\s\\-()]", "")
+                            locationInsight.m_directionRequests = entry.value.actionStats.ACTIONS_DRIVING_DIRECTIONS.total.numeric
+                            locationInsight.m_mobilePhoneCalls = entry.value.actionStats.ACTIONS_PHONE.total.numeric
+                            locationInsight.m_websiteVisits = entry.value.actionStats.ACTIONS_WEBSITE.total.numeric
+                            locationInsight.m_localPostActions = entry.value.localPostStats.LOCAL_POST_ACTIONS_CALL_TO_ACTION.total.numeric
+                            locationInsight.m_localPostViews = entry.value.localPostStats.LOCAL_POST_VIEWS_SEARCH.total.numeric
+                            locationInsight.m_customerPhotoCount = entry.value.photoStats.PHOTOS_COUNT_CUSTOMERS.total.numeric
+                            locationInsight.m_merchantPhotoCount = entry.value.photoStats.PHOTOS_COUNT_MERCHANT.total.numeric
+                            locationInsight.m_customerPhotoViews = entry.value.photoStats.PHOTOS_VIEWS_CUSTOMERS.total.numeric
+                            locationInsight.m_merchantPhotoViews = entry.value.photoStats.PHOTOS_VIEWS_MERCHANT.total.numeric
+                            locationInsight.m_directSearches = entry.value.searchStats.QUERIES_DIRECT.total.numeric
+                            locationInsight.m_discoverySearches = entry.value.searchStats.QUERIES_INDIRECT.total.numeric
+                            locationInsight.m_mapViews = entry.value.viewStats.VIEWS_MAPS.total.numeric
+                            locationInsight.m_searchViews = entry.value.viewStats.VIEWS_SEARCH.total.numeric
 
-                        googleMyBusiness.storeInsightList.add(locationInsight)
+                            googleMyBusiness.storeInsightList.add(locationInsight)
 
-                        for(Object rate : entry.value.aggregate) {
-                            StoreRating locationRating = new StoreRating();
+                            for (Object rate : entry.value.aggregate) {
+                                StoreRating locationRating = new StoreRating();
 
-                            locationRating.m_storeId = store.storeId
-                            locationRating.m_storeKey = store.storeKey
-                            locationRating.m_storeAddress = store.storeAddress
-                            locationRating.m_date = insightDate
-                            locationRating.m_dateKey = insightDate.replaceAll("[\\s\\-()]", "");
-                            locationRating.m_rating = rate.rating
+                                locationRating.m_storeId = store.storeId
+                                locationRating.m_storeKey = store.storeKey
+                                locationRating.m_storeAddress = store.storeAddress
+                                locationRating.m_date = dateObject.insightDate
+                                locationRating.m_dateKey = dateObject.insightDate.replaceAll("[\\s\\-()]", "");
+                                locationRating.m_rating = rate.rating
 
-                            googleMyBusiness.storeRatingList.add(locationRating)
+                                googleMyBusiness.storeRatingList.add(locationRating)
+                            }
                         }
                     }
+                } else {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(connection.getErrorStream()));
+                    String strCurrentLine;
+                    while ((strCurrentLine = br.readLine()) != null) {
+                        println(strCurrentLine);
+                    }
                 }
-            } else {
-                BufferedReader br = new BufferedReader(new InputStreamReader(connection.getErrorStream()));
-                String strCurrentLine;
-                while ((strCurrentLine = br.readLine()) != null) {
-                    println(strCurrentLine);
-                }
+
             }
 
+            return googleMyBusiness;
         }
-
-        return googleMyBusiness;
     }
 
     public void processStoreInsights(List<StoreInsight> storeInsightList){
@@ -416,17 +419,37 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
             aggregate = programArguments.getArgumentAsString("aggregate").get()
         }
 
-            if (programArguments.getArgumentAsLocalDate("startDate").isPresent()) {
-                startDateString = programArguments.getRequiredArgumentAsLocalDate("startDate")
-                endDateString = programArguments.getRequiredArgumentAsLocalDate("endDate")
-                startDate = startDateString + "T00:00"
-                endDate = endDateString + "T23:59:59.999999999"
-                insightDate = startDateString
+        if (programArguments.getArgumentAsInteger("days").isPresent()) {
+            runDays = programArguments.getArgumentAsInteger("days").get()
+        }
+
+            if (programArguments.getArgumentAsLocalDate("firstDay").isPresent()) {
+
+                LocalDate first = programArguments.getRequiredArgumentAsLocalDate("firstDay")
+                LocalDate last = programArguments.getRequiredArgumentAsLocalDate("lastDay")
+                long numOfDaysBetween = ChronoUnit.DAYS.between(first, last);
+                List<LocalDate> localDates = IntStream.iterate(0, i -> i + 1)
+                        .limit(numOfDaysBetween)
+                        .mapToObj(i -> first.plusDays(i))
+                        .collect(Collectors.toList());
+                localDates.add(last)
+
+                for(LocalDate localDate : localDates)
+                {
+                    InsightDate dateObject = new InsightDate()
+                    firstDayString = localDate.toString()
+                    dateObject.startDate = firstDayString + "T00:00"
+                    dateObject.endDate = firstDayString + "T23:59:59.999999999"
+                    dateObject.insightDate = firstDayString
+                    dateList.add(dateObject)
+                }
             } else {
+                InsightDate dateObject = new InsightDate()
                 LocalDateTime now = LocalDateTime.now().minus(4, ChronoUnit.DAYS);
-                insightDate = now.format(formatter)
-                startDate = now.with(LocalTime.MIN);
-                endDate = now.with(LocalTime.MAX);
+                dateObject.insightDate = now.format(formatter)
+                dateObject.startDate = now.with(LocalTime.MIN);
+                dateObject.endDate = now.with(LocalTime.MAX);
+                dateList.add(dateObject)
             }
 
         if (programArguments.getArgumentAsString("localPath").isPresent()) {
