@@ -256,9 +256,8 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
                 }
 
             }
-
-            return googleMyBusiness;
         }
+        return googleMyBusiness;
     }
 
     public void processStoreInsights(List<StoreInsight> storeInsightList){
