@@ -51,7 +51,7 @@ def addPackageSuffix(String version, String profile) {
 }
 
 def addAdditionalParams(String days, String firstDay, String lastDay, String additionalParams) {
-    String dateParams = days == 'NULL' ? "startDate=${firstDay} endDate=${lastDay}" : "days=${days}"
+    String dateParams = days == 'NULL' ? "firstDay=${firstDay} lastDay=${lastDay}" : "days=${days}"
     additionalParams = additionalParams != 'NULL' ? additionalParams : ' '
     return additionalParams + ' ' + dateParams + ' '
 }
