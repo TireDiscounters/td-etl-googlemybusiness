@@ -173,7 +173,7 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
 
     public GoogleMyBusiness getLocationInsights(String accountId, List<Store> storeList){
         for (InsightDate dateObject : dateList) {
-            URL url = new URL(gmbURL + '/insights/?endDateTime=' + dateObject.endDate + '&startDateTime=' + dateObject.startDate + '&aggregate=minute')
+            URL url = new URL(gmbURL + '/insights/?endDateTime=' + dateObject.endDate + '&startDateTime=' + dateObject.startDate + '&aggregate=second')
             for (Store store : storeList) {
 
                 String accountLocString = "{\"locations\": [\"${accountId}/${store.locationId}\"]}"
@@ -261,90 +261,89 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
     public void processStoreInsights(List<StoreInsight> storeInsightList){
         final ExecutorService executor = Executors.newFixedThreadPool(12)
 
-        if (storeInsightList == null || storeInsightList.size() == 0){
-            LOGGER.info("No store insights in the list.")
-            System.exit(0)
-        }
+        if (storeInsightList != null || storeInsightList.size() > 0){
+            int count = 0
+            final List<StoreInsight> buffer = new ArrayList<>()
+            String tableName = "store_insights"
+            String objectKeyPrefix = m_objectKeyPrefix + tableName + "/"
+            storeInsightList.each { final storeInsight ->
+                if (batchIsFull(count)) {
+                    LOGGER.info("$count store insights have been extracted and translated")
 
-        int count = 0
-        final List<StoreInsight> buffer = new ArrayList<>()
-        String tableName = "store_insights"
-        String objectKeyPrefix = m_objectKeyPrefix + tableName + "/"
-        storeInsightList.each { final storeInsight ->
-            if (batchIsFull(count)) {
-                LOGGER.info("$count store insights have been extracted and translated")
+                    // dump the buffer content into a new collection
+                    List<StoreInsight> recordList = new ArrayList<>()
+                    buffer.each { recordList.add(it) }
 
-                // dump the buffer content into a new collection
-                List<StoreInsight> recordList = new ArrayList<>()
-                buffer.each { recordList.add(it) }
+                    // clear the buffer
+                    buffer.clear()
 
-                // clear the buffer
-                buffer.clear()
-
-                // write the records to a S3 object
-                executor.execute {
-                    createS3ObjectByTable(recordList, objectKeyPrefix, tableName)
+                    // write the records to a S3 object
+                    executor.execute {
+                        createS3ObjectByTable(recordList, objectKeyPrefix, tableName)
+                    }
+                    count = 0
                 }
-                count = 0
+
+                buffer.add(storeInsight)
+                count ++
             }
 
-            buffer.add(storeInsight)
-            count ++
-        }
-
-        if (buffer.size() > 0) {
-            // if the buffer is not empty, write its content to a S3 object
-            executor.execute {
-                createS3ObjectByTable(buffer, objectKeyPrefix, tableName)
+            if (buffer.size() > 0) {
+                // if the buffer is not empty, write its content to a S3 object
+                executor.execute {
+                    createS3ObjectByTable(buffer, objectKeyPrefix, tableName)
+                }
             }
-        }
 
-        executor.shutdown()
+            executor.shutdown()
+
+        }else{
+            LOGGER.info("No store insights in the list.")
+        }
 
     }
 
     public void processStoreRatings(List<StoreRating> storeRatingList){
         final ExecutorService executor = Executors.newFixedThreadPool(12)
 
-        if (storeRatingList == null || storeRatingList.size() == 0){
-            LOGGER.info("No store ratings in the list.")
-            System.exit(0)
-        }
+        if (storeRatingList != null || storeRatingList.size() > 0){
+            int count = 0
+            final List<StoreRating> buffer = new ArrayList<>()
+            String tableName = "store_ratings"
+            String objectKeyPrefix = m_objectKeyPrefix + tableName + "/"
+            storeRatingList.each { final storeRating ->
+                if (batchIsFull(count)) {
+                    LOGGER.info("$count store ratings have been extracted and translated")
 
-        int count = 0
-        final List<StoreRating> buffer = new ArrayList<>()
-        String tableName = "store_ratings"
-        String objectKeyPrefix = m_objectKeyPrefix + tableName + "/"
-        storeRatingList.each { final storeRating ->
-            if (batchIsFull(count)) {
-                LOGGER.info("$count store ratings have been extracted and translated")
+                    // dump the buffer content into a new collection
+                    List<StoreRating> recordList = new ArrayList<>()
+                    buffer.each { recordList.add(it) }
 
-                // dump the buffer content into a new collection
-                List<StoreRating> recordList = new ArrayList<>()
-                buffer.each { recordList.add(it) }
+                    // clear the buffer
+                    buffer.clear()
 
-                // clear the buffer
-                buffer.clear()
-
-                // write the records to a S3 object
-                executor.execute {
-                    createS3ObjectByTable(recordList, objectKeyPrefix, tableName)
+                    // write the records to a S3 object
+                    executor.execute {
+                        createS3ObjectByTable(recordList, objectKeyPrefix, tableName)
+                    }
+                    count = 0
                 }
-                count = 0
+
+                buffer.add(storeRating)
+                count ++
             }
 
-            buffer.add(storeRating)
-            count ++
-        }
-
-        if (buffer.size() > 0) {
-            // if the buffer is not empty, write its content to a S3 object
-            executor.execute {
-                createS3ObjectByTable(buffer, objectKeyPrefix, tableName)
+            if (buffer.size() > 0) {
+                // if the buffer is not empty, write its content to a S3 object
+                executor.execute {
+                    createS3ObjectByTable(buffer, objectKeyPrefix, tableName)
+                }
             }
-        }
 
-        executor.shutdown()
+            executor.shutdown()
+        }else{
+            LOGGER.info("No store ratings in the list.")
+        }
 
     }
 
