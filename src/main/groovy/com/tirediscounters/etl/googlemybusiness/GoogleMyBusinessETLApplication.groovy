@@ -53,8 +53,7 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
     private String gmbURL
     private String gmbToken
     private String gmbGID
-    private String aggregate
-    private Integer runDays
+    private String accountName
     private String m_objectKeyPrefix
     private String accountId = new String();
     private List<Store> storeList = new ArrayList<Store>();
@@ -113,7 +112,7 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
             def responseJson = new JsonSlurper().parseText(responseBody)
 
             for (Object entry : responseJson) {
-                if (entry.accountName == "Tire Discounters")
+                if (entry.accountName == accountName)
                 {
                     accountId = entry.accountId
                 }
@@ -174,7 +173,7 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
 
     public GoogleMyBusiness getLocationInsights(String accountId, List<Store> storeList){
         for (InsightDate dateObject : dateList) {
-            URL url = new URL(gmbURL + '/insights/?endDateTime=' + dateObject.endDate + '&startDateTime=' + dateObject.startDate)
+            URL url = new URL(gmbURL + '/insights/?endDateTime=' + dateObject.endDate + '&startDateTime=' + dateObject.startDate + '&aggregate=minute')
             for (Store store : storeList) {
 
                 String accountLocString = "{\"locations\": [\"${accountId}/${store.locationId}\"]}"
@@ -182,7 +181,6 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
                 HttpURLConnection connection = (HttpURLConnection) url.openConnection()
                 connection.setRequestProperty("Authorization", gmbToken)
                 connection.setRequestProperty("gid", gmbGID)
-                connection.setRequestProperty("aggregate", "minute")
                 connection.setRequestProperty("Accept", "*/*")
                 connection.setRequestProperty("content-type", "application/json");
                 connection.setDoOutput(true)
@@ -190,7 +188,7 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
                 OutputStream os = connection.getOutputStream();
                 OutputStreamWriter wr = new OutputStreamWriter(os, "UTF-8");
                 wr.write(accountLocString);
-                wr.flush();
+                wr.flush()
                 wr.close();
                 os.close();
                 connection.connect();
@@ -414,42 +412,41 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
         m_objectKeyPrefix = programEnvironment.getRequiredPropertyAsString('aws.s3.key.prefix')
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-        if (programArguments.getArgumentAsString("aggregate").isPresent()) {
-            aggregate = programArguments.getArgumentAsString("aggregate").get()
-        }
 
-        if (programArguments.getArgumentAsInteger("days").isPresent()) {
-            runDays = programArguments.getArgumentAsInteger("days").get()
-        }
+        if (programArguments.getArgumentAsLocalDate("firstDay").isPresent()) {
 
-            if (programArguments.getArgumentAsLocalDate("firstDay").isPresent()) {
+            LocalDate first = programArguments.getRequiredArgumentAsLocalDate("firstDay")
+            LocalDate last = programArguments.getRequiredArgumentAsLocalDate("lastDay")
+            long numOfDaysBetween = ChronoUnit.DAYS.between(first, last);
+            List<LocalDate> localDates = IntStream.iterate(0, i -> i + 1)
+                    .limit(numOfDaysBetween)
+                    .mapToObj(i -> first.plusDays(i))
+                    .collect(Collectors.toList());
+            localDates.add(last)
 
-                LocalDate first = programArguments.getRequiredArgumentAsLocalDate("firstDay")
-                LocalDate last = programArguments.getRequiredArgumentAsLocalDate("lastDay")
-                long numOfDaysBetween = ChronoUnit.DAYS.between(first, last);
-                List<LocalDate> localDates = IntStream.iterate(0, i -> i + 1)
-                        .limit(numOfDaysBetween)
-                        .mapToObj(i -> first.plusDays(i))
-                        .collect(Collectors.toList());
-                localDates.add(last)
-
-                for(LocalDate localDate : localDates)
-                {
-                    InsightDate dateObject = new InsightDate()
-                    firstDayString = localDate.toString()
-                    dateObject.startDate = firstDayString + "T00:00"
-                    dateObject.endDate = firstDayString + "T23:59:59.999999999"
-                    dateObject.insightDate = firstDayString
-                    dateList.add(dateObject)
-                }
-            } else {
+            for(LocalDate localDate : localDates)
+            {
                 InsightDate dateObject = new InsightDate()
-                LocalDateTime now = LocalDateTime.now().minus(4, ChronoUnit.DAYS);
-                dateObject.insightDate = now.format(formatter)
-                dateObject.startDate = now.with(LocalTime.MIN);
-                dateObject.endDate = now.with(LocalTime.MAX);
+                firstDayString = localDate.toString()
+                dateObject.startDate = firstDayString + "T00:00"
+                dateObject.endDate = firstDayString + "T23:59:59.999999999"
+                dateObject.insightDate = firstDayString
                 dateList.add(dateObject)
             }
+        } else {
+            InsightDate dateObject = new InsightDate()
+            LocalDateTime now = LocalDateTime.now().minus(4, ChronoUnit.DAYS);
+            dateObject.insightDate = now.format(formatter)
+            dateObject.startDate = now.with(LocalTime.MIN);
+            dateObject.endDate = now.with(LocalTime.MAX);
+            dateList.add(dateObject)
+        }
+
+        if (programArguments.getArgumentAsString("accountName").isPresent()) {
+            accountName = (programArguments.getRequiredArgumentAsString("accountName") == "Glass") ? "TD Auto Glass" : "Tire Discounters"
+        }else {
+            accountName = "Tire Discounters"
+        }
 
         if (programArguments.getArgumentAsString("localPath").isPresent()) {
             this.m_localPath = programArguments.getArgumentAsString("localPath").get()
