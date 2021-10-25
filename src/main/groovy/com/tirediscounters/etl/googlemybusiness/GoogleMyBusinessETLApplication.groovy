@@ -173,7 +173,8 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
 
     public GoogleMyBusiness getLocationInsights(String accountId, List<Store> storeList){
         for (InsightDate dateObject : dateList) {
-            URL url = new URL(gmbURL + '/insights/?endDateTime=' + dateObject.endDate + '&startDateTime=' + dateObject.startDate + '&aggregate=second')
+            //aggregate only applies to the ratings returns (setting this to millisecond to make sure we dont get any aggregated ratings)
+            URL url = new URL(gmbURL + '/insights/?endDateTime=' + dateObject.endDate + '&startDateTime=' + dateObject.startDate + '&aggregate=millisecond')
             for (Store store : storeList) {
 
                 String accountLocString = "{\"locations\": [\"${accountId}/${store.locationId}\"]}"
