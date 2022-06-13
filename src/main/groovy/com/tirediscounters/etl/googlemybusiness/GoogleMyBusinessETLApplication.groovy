@@ -443,8 +443,22 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
         }
 
         if (programArguments.getArgumentAsString("accountName").isPresent()) {
-            accountName = (programArguments.getRequiredArgumentAsString("accountName") == "Glass") ? "TD Auto Glass" : "Tire Discounters"
-        }else {
+            String incomingAccountName = programArguments.getRequiredArgumentAsString("accountName")
+
+            switch(incomingAccountName) {
+                case "Glass":
+                    accountName = "TD Auto Glass and ADAS"
+                    break;
+                case "Mudder":
+                    accountName = "Mudder Trucker"
+                    break;
+                case "Acquisition":
+                    accountName = "TD Acquisitions"
+                    break;
+                default:
+                    "Tire Discounters"
+            }
+        }else{
             accountName = "Tire Discounters"
         }
 

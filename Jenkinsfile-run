@@ -19,7 +19,7 @@ pipeline {
     environment {
         NEXUS_API = 'https://nexus.tirediscountersdirect.com/nexus/service/rest/v1'
         ARTIFACT = 'td-etl-google-my-business'
-        VERSION = '1.0.7'
+        VERSION = '1.0.8'
     }
     stages {
         stage('Download ETL JAR') {

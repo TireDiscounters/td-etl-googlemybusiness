@@ -10,7 +10,7 @@
     </parent>
     <groupId>com.tirediscounters</groupId>
     <artifactId>td-etl-google-my-business</artifactId>
-    <version>1.0.7${version.suffix}</version>
+    <version>1.0.8${version.suffix}</version>
     <name>td-etl-google-my-business</name>
     <description>ETL program for the Google My Business fact table</description>
 
