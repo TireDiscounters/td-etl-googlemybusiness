@@ -150,6 +150,8 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
             String responseBody = sb.toString();
             def responseJson = new JsonSlurper().parseText(responseBody)
             for(Object entry : responseJson) {
+                if (entry.storeCode == null) continue
+
                 Store storeObject = new Store();
                 storeObject.locationId = entry.locationId
                 storeObject.storeId = entry.storeCode
@@ -221,10 +223,10 @@ class GoogleMyBusinessETLApplication extends APIETLApplication implements Comman
                             locationInsight.m_websiteVisits = entry.value.actionStats.ACTIONS_WEBSITE.total.numeric
                             locationInsight.m_localPostActions = entry.value.localPostStats.LOCAL_POST_ACTIONS_CALL_TO_ACTION.total.numeric
                             locationInsight.m_localPostViews = entry.value.localPostStats.LOCAL_POST_VIEWS_SEARCH.total.numeric
-                            locationInsight.m_customerPhotoCount = entry.value.photoStats.PHOTOS_COUNT_CUSTOMERS.total.numeric
-                            locationInsight.m_merchantPhotoCount = entry.value.photoStats.PHOTOS_COUNT_MERCHANT.total.numeric
-                            locationInsight.m_customerPhotoViews = entry.value.photoStats.PHOTOS_VIEWS_CUSTOMERS.total.numeric
-                            locationInsight.m_merchantPhotoViews = entry.value.photoStats.PHOTOS_VIEWS_MERCHANT.total.numeric
+                            locationInsight.m_customerPhotoCount = entry.value.photoCount.PHOTOS_COUNT_CUSTOMERS.total.numeric
+                            locationInsight.m_merchantPhotoCount = entry.value.photoCount.PHOTOS_COUNT_MERCHANT.total.numeric
+                            locationInsight.m_customerPhotoViews = entry.value.photoViews.PHOTOS_VIEWS_CUSTOMERS.total.numeric
+                            locationInsight.m_merchantPhotoViews = entry.value.photoViews.PHOTOS_VIEWS_MERCHANT.total.numeric
                             locationInsight.m_directSearches = entry.value.searchStats.QUERIES_DIRECT.total.numeric
                             locationInsight.m_discoverySearches = entry.value.searchStats.QUERIES_INDIRECT.total.numeric
                             locationInsight.m_mapViews = entry.value.viewStats.VIEWS_MAPS.total.numeric
